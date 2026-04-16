@@ -5,8 +5,10 @@ Use this workflow to bootstrap a GitHub Project that tracks the agentic loop for
 ## Prerequisites
 
 - A branch or repository that contains `.github/workflows/CreateAgenticProject.yaml`
-- A `GhTokenWorkflow` secret containing a fine-grained PAT
-- The PAT needs write access to Projects and the target repository
+- A `GhTokenWorkflow` secret containing either:
+  - a classic PAT with `project` scope, or
+  - AL-Go GitHub App JSON with `GitHubAppClientId` and `PrivateKey`
+- For Microsoft organization projects, GitHub App authentication is the recommended option
 
 ## Run the workflow
 
@@ -14,8 +16,8 @@ Use this workflow to bootstrap a GitHub Project that tracks the agentic loop for
 2. Select **Actions**.
 3. Select **Create Agentic Project**.
 4. Choose **Run workflow**.
-5. Set `targetRepository` to a repository such as `Aleyenda/BCAppsCampAIRHack`.
-6. Set `projectOwner` to the user or organization that should own the project, such as `Aleyenda`.
+5. Set `targetRepository` to a repository such as `microsoft/BCAppsCampAIRHack`.
+6. Set `projectOwner` to the user or organization that should own the project, such as `microsoft`.
 7. Set `sourceProjectId` if you already have a template project to copy from.
 8. Turn on `seedDemoData` if you want a fully populated demo board without creating any repository issues.
 9. Wait for the workflow to complete and open the project URL from the job summary.
@@ -30,7 +32,7 @@ Use this workflow to bootstrap a GitHub Project that tracks the agentic loop for
 ## Current limitations
 
 - GitHub does not copy auto-add workflows from project templates, so you still need to enable auto-add rules manually in the project UI.
-- The workflow currently expects `GhTokenWorkflow` to be a PAT string. GitHub App JSON is not yet supported in this bootstrap script.
+- Fine-grained PATs are not the recommended path for this workflow because Projects automation is handled through classic `project` scope or GitHub App installation tokens.
 
 ______________________________________________________________________
 

@@ -414,11 +414,7 @@ function Ensure-RepositoryLabels {
 }
 
 if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
-    throw "GH_TOKEN is not set. Configure GhTokenWorkflow as a fine-grained PAT with project write access before running this workflow."
-}
-
-if ($env:GH_TOKEN.TrimStart().StartsWith("{")) {
-    throw "This workflow currently expects GhTokenWorkflow to contain a PAT string. GitHub App JSON is not yet supported by .github/CreateAgenticProject.ps1."
+    throw "GH_TOKEN is not set. Configure GhTokenWorkflow with either a classic PAT that has project scope or AL-Go GitHub App JSON."
 }
 
 $repoInfo = Get-OwnerAndRepo -Repository $TargetRepository

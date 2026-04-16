@@ -8,11 +8,11 @@ on:
       targetRepository:
         description: 'Repository to prepare for the agentic loop board (owner/name)'
         required: true
-        default: 'Aleyenda/BCAppsCampAIRHack'
+        default: 'microsoft/BCAppsCampAIRHack'
       projectOwner:
         description: 'Organization or user that will own the GitHub Project'
         required: true
-        default: 'Aleyenda'
+        default: 'microsoft'
       projectTitle:
         description: 'Optional project title override'
         required: false
@@ -59,15 +59,46 @@ jobs:
           GH_TOKEN_WORKFLOW: ${{ secrets.GhTokenWorkflow }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN_WORKFLOW)) {
-            throw "GhTokenWorkflow secret is required. Use a fine-grained PAT with project write access for this workflow."
+            throw "GhTokenWorkflow secret is required. Use either a classic PAT with project scope or the AL-Go GitHub App JSON format."
+          }
+
+      - name: Resolve GhTokenWorkflow auth
+        id: ResolveAuth
+        env:
+          GH_TOKEN_WORKFLOW: ${{ secrets.GhTokenWorkflow }}
+        run: |
+          if ($env:GH_TOKEN_WORKFLOW.TrimStart().StartsWith('{')) {
+            $auth = $env:GH_TOKEN_WORKFLOW | ConvertFrom-Json
+            if ([string]::IsNullOrWhiteSpace($auth.GitHubAppClientId) -or [string]::IsNullOrWhiteSpace($auth.PrivateKey)) {
+              throw "GhTokenWorkflow JSON must contain GitHubAppClientId and PrivateKey."
+            }
+
+            Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value "authMode=app"
+            Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value "appId=$($auth.GitHubAppClientId)"
+            Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value "privateKey<<EOF"
+            Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value $auth.PrivateKey
+            Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value "EOF"
+          }
+          else {
+            Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value "authMode=token"
+            Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value "token=$env:GH_TOKEN_WORKFLOW"
           }
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Generate GitHub App token
+        if: steps.ResolveAuth.outputs.authMode == 'app'
+        id: AppToken
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ steps.ResolveAuth.outputs.appId }}
+          private-key: ${{ steps.ResolveAuth.outputs.privateKey }}
+          owner: ${{ inputs.projectOwner }}
+
       - name: Bootstrap agentic project
         env:
-          GH_TOKEN: ${{ secrets.GhTokenWorkflow }}
+          GH_TOKEN: ${{ steps.ResolveAuth.outputs.authMode == 'app' && steps.AppToken.outputs.token || steps.ResolveAuth.outputs.token }}
           TARGET_REPOSITORY: ${{ inputs.targetRepository }}
           PROJECT_OWNER: ${{ inputs.projectOwner }}
           PROJECT_TITLE: ${{ inputs.projectTitle }}
