@@ -1,0 +1,79 @@
+name: Create Agentic Project
+
+run-name: "Create agentic project for [${{ inputs.targetRepository }}]"
+
+on:
+  workflow_dispatch:
+    inputs:
+      targetRepository:
+        description: 'Repository to prepare for the agentic loop board (owner/name)'
+        required: true
+        default: 'Aleyenda/BCAppsCampAIRHack'
+      projectOwner:
+        description: 'Organization or user that will own the GitHub Project'
+        required: true
+        default: 'Aleyenda'
+      projectTitle:
+        description: 'Optional project title override'
+        required: false
+        default: ''
+      sourceProjectId:
+        description: 'Optional source ProjectV2 node ID to copy from'
+        required: false
+        default: ''
+      createRepositoryLabels:
+        type: boolean
+        description: 'Create or update the recommended agentic loop labels on the target repository'
+        required: false
+        default: true
+      dryRun:
+        type: boolean
+        description: 'Validate inputs without creating the project'
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  CreateAgenticProject:
+    runs-on: [ ubuntu-latest ]
+    steps:
+      - name: Harden Runner
+        if: github.repository_owner == 'microsoft'
+        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
+        with:
+          egress-policy: audit
+
+      - name: Validate GhTokenWorkflow
+        env:
+          GH_TOKEN_WORKFLOW: ${{ secrets.GhTokenWorkflow }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN_WORKFLOW)) {
+            throw "GhTokenWorkflow secret is required. Use a fine-grained PAT with project write access for this workflow."
+          }
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Bootstrap agentic project
+        env:
+          GH_TOKEN: ${{ secrets.GhTokenWorkflow }}
+          TARGET_REPOSITORY: ${{ inputs.targetRepository }}
+          PROJECT_OWNER: ${{ inputs.projectOwner }}
+          PROJECT_TITLE: ${{ inputs.projectTitle }}
+          SOURCE_PROJECT_ID: ${{ inputs.sourceProjectId }}
+          CREATE_REPOSITORY_LABELS: ${{ inputs.createRepositoryLabels }}
+          DRY_RUN: ${{ inputs.dryRun }}
+        run: |
+          ./.github/CreateAgenticProject.ps1 `
+            -TargetRepository $env:TARGET_REPOSITORY `
+            -ProjectOwner $env:PROJECT_OWNER `
+            -ProjectTitle $env:PROJECT_TITLE `
+            -SourceProjectId $env:SOURCE_PROJECT_ID `
+            -CreateRepositoryLabels:($env:CREATE_REPOSITORY_LABELS -eq 'true') `
+            -DryRun:($env:DRY_RUN -eq 'true')
