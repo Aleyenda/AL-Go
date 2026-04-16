@@ -17,13 +17,15 @@ Use this workflow to bootstrap a GitHub Project that tracks the agentic loop for
 5. Set `targetRepository` to a repository such as `Aleyenda/BCAppsCampAIRHack`.
 6. Set `projectOwner` to the user or organization that should own the project, such as `Aleyenda`.
 7. Set `sourceProjectId` if you already have a template project to copy from.
-8. Wait for the workflow to complete and open the project URL from the job summary.
+8. Turn on `seedDemoData` if you want a fully populated demo board without creating any repository issues.
+9. Wait for the workflow to complete and open the project URL from the job summary.
 
 ## What the workflow creates
 
 - A new GitHub Project in the selected user or organization
 - `Agentic Stage` and `Agentic Attention` fields when no template is provided
 - Recommended repository labels such as `agentic:signal` and `attention:blocked`
+- Optional demo draft issues that live only inside the project
 
 ## Current limitations
 

@@ -26,6 +26,11 @@ on:
         description: 'Create or update the recommended agentic loop labels on the target repository'
         required: false
         default: true
+      seedDemoData:
+        type: boolean
+        description: 'Seed demo draft issues into the project without creating issues in the target repository'
+        required: false
+        default: false
       dryRun:
         type: boolean
         description: 'Validate inputs without creating the project'
@@ -68,6 +73,7 @@ jobs:
           PROJECT_TITLE: ${{ inputs.projectTitle }}
           SOURCE_PROJECT_ID: ${{ inputs.sourceProjectId }}
           CREATE_REPOSITORY_LABELS: ${{ inputs.createRepositoryLabels }}
+          SEED_DEMO_DATA: ${{ inputs.seedDemoData }}
           DRY_RUN: ${{ inputs.dryRun }}
         run: |
           ./.github/CreateAgenticProject.ps1 `
@@ -76,4 +82,5 @@ jobs:
             -ProjectTitle $env:PROJECT_TITLE `
             -SourceProjectId $env:SOURCE_PROJECT_ID `
             -CreateRepositoryLabels:($env:CREATE_REPOSITORY_LABELS -eq 'true') `
+            -SeedDemoData:($env:SEED_DEMO_DATA -eq 'true') `
             -DryRun:($env:DRY_RUN -eq 'true')

@@ -8,6 +8,7 @@ Param(
     [string] $StageFieldName = "Agentic Stage",
     [string] $AttentionFieldName = "Agentic Attention",
     [bool] $CreateRepositoryLabels = $true,
+    [bool] $SeedDemoData = $false,
     [bool] $DryRun = $false
 )
 
@@ -197,6 +198,197 @@ mutation(`$projectId: ID!, `$fieldId: ID!, `$options: [ProjectV2SingleSelectFiel
         }).updateProjectV2SingleSelectField.projectV2SingleSelectField
 }
 
+function Get-ProjectFields {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string] $ProjectId
+    )
+
+    $query = @"
+query(`$projectId: ID!) {
+  node(id: `$projectId) {
+    ... on ProjectV2 {
+      fields(first: 50) {
+        nodes {
+          ... on ProjectV2FieldCommon {
+            id
+            name
+          }
+          ... on ProjectV2SingleSelectField {
+            options {
+              id
+              name
+              color
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"@
+
+    return (Invoke-GraphQL -Query $query -Variables @{ projectId = $ProjectId }).node.fields.nodes
+}
+
+function Add-DraftProjectIssue {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string] $ProjectId,
+        [Parameter(Mandatory = $true)]
+        [string] $Title,
+        [string] $Body = ""
+    )
+
+    $query = @"
+mutation(`$projectId: ID!, `$title: String!, `$body: String!) {
+  addProjectV2DraftIssue(input: { projectId: `$projectId, title: `$title, body: `$body }) {
+    projectItem {
+      id
+    }
+  }
+}
+"@
+
+    return (Invoke-GraphQL -Query $query -Variables @{
+            projectId = $ProjectId
+            title     = $Title
+            body      = $Body
+        }).addProjectV2DraftIssue.projectItem
+}
+
+function Set-ProjectSingleSelectFieldValue {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string] $ProjectId,
+        [Parameter(Mandatory = $true)]
+        [string] $ItemId,
+        [Parameter(Mandatory = $true)]
+        [string] $FieldId,
+        [Parameter(Mandatory = $true)]
+        [string] $OptionId
+    )
+
+    $query = @"
+mutation(`$projectId: ID!, `$itemId: ID!, `$fieldId: ID!, `$optionId: ID!) {
+  updateProjectV2ItemFieldValue(
+    input: {
+      projectId: `$projectId,
+      itemId: `$itemId,
+      fieldId: `$fieldId,
+      value: { singleSelectOptionId: `$optionId }
+    }
+  ) {
+    projectV2Item {
+      id
+    }
+  }
+}
+"@
+
+    $null = Invoke-GraphQL -Query $query -Variables @{
+        projectId = $ProjectId
+        itemId    = $ItemId
+        fieldId   = $FieldId
+        optionId  = $OptionId
+    }
+}
+
+function Get-SingleSelectFieldByName {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [object[]] $Fields,
+        [Parameter(Mandatory = $true)]
+        [string] $FieldName
+    )
+
+    $field = $Fields | Where-Object { $_.name -eq $FieldName } | Select-Object -First 1
+    if (-not $field) {
+        throw "Unable to find single select field '$FieldName' on the project."
+    }
+
+    return $field
+}
+
+function Get-SingleSelectOptionId {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [object] $Field,
+        [Parameter(Mandatory = $true)]
+        [string] $OptionName
+    )
+
+    $option = $Field.options | Where-Object { $_.name -eq $OptionName } | Select-Object -First 1
+    if (-not $option) {
+        throw "Unable to find option '$OptionName' in field '$($Field.name)'."
+    }
+
+    return $option.id
+}
+
+function Seed-DemoProjectItems {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string] $ProjectId,
+        [Parameter(Mandatory = $true)]
+        [string] $ProjectUrl,
+        [Parameter(Mandatory = $true)]
+        [string] $StageFieldName,
+        [Parameter(Mandatory = $true)]
+        [string] $AttentionFieldName
+    )
+
+    $fields = Get-ProjectFields -ProjectId $ProjectId
+    $stageField = Get-SingleSelectFieldByName -Fields $fields -FieldName $StageFieldName
+    $attentionField = Get-SingleSelectFieldByName -Fields $fields -FieldName $AttentionFieldName
+
+    $demoItems = @(
+        @{
+            Title     = "Signal Agent created issue from telemetry spike"
+            Body      = "Demo draft issue. Represents a newly created signal that has not yet been triaged."
+            Stage     = "New"
+            Attention = "OK"
+        },
+        @{
+            Title     = "Triage needs partner decision on solution scope"
+            Body      = "Demo draft issue. Represents an item that has been triaged and now requires a human decision before planning continues."
+            Stage     = "Triaged"
+            Attention = "Human intervention"
+        },
+        @{
+            Title     = "Development active on bug fix branch"
+            Body      = "Demo draft issue. Represents an in-flight implementation that is currently progressing through coding and tests."
+            Stage     = "Implementing"
+            Attention = "In progress"
+        },
+        @{
+            Title     = "Pull request awaiting approval from maintainer"
+            Body      = "Demo draft issue. Represents a change that is ready for review but still waiting for a person to approve it."
+            Stage     = "Pull Request"
+            Attention = "Pending review"
+        },
+        @{
+            Title     = "Release blocked by failed environment verification"
+            Body      = "Demo draft issue. Represents a late-stage issue that is blocked and should stand out in the board."
+            Stage     = "Pull Request"
+            Attention = "Blocked"
+        },
+        @{
+            Title     = "Hotfix shipped successfully"
+            Body      = "Demo draft issue. Represents a completed item that has already moved through the full loop."
+            Stage     = "Released"
+            Attention = "OK"
+        }
+    )
+
+    foreach ($demoItem in $demoItems) {
+        Write-Host "Adding demo draft issue '$($demoItem.Title)' to $ProjectUrl"
+        $projectItem = Add-DraftProjectIssue -ProjectId $ProjectId -Title $demoItem.Title -Body $demoItem.Body
+        Set-ProjectSingleSelectFieldValue -ProjectId $ProjectId -ItemId $projectItem.id -FieldId $stageField.id -OptionId (Get-SingleSelectOptionId -Field $stageField -OptionName $demoItem.Stage)
+        Set-ProjectSingleSelectFieldValue -ProjectId $ProjectId -ItemId $projectItem.id -FieldId $attentionField.id -OptionId (Get-SingleSelectOptionId -Field $attentionField -OptionName $demoItem.Attention)
+    }
+}
+
 function Ensure-RepositoryLabels {
     Param(
         [Parameter(Mandatory = $true)]
@@ -256,6 +448,7 @@ Write-Host "Project owner: $ProjectOwner"
 Write-Host "Project title: $ProjectTitle"
 Write-Host "Template source project: $(if ($SourceProjectId) { $SourceProjectId } else { '<none>' })"
 Write-Host "Create repository labels: $CreateRepositoryLabels"
+Write-Host "Seed demo data: $SeedDemoData"
 Write-Host "Dry run: $DryRun"
 
 if ($DryRun) {
@@ -281,6 +474,10 @@ if ($CreateRepositoryLabels) {
     Ensure-RepositoryLabels -Repository $TargetRepository
 }
 
+if ($SeedDemoData) {
+    Seed-DemoProjectItems -ProjectId $project.id -ProjectUrl $project.url -StageFieldName $StageFieldName -AttentionFieldName $AttentionFieldName
+}
+
 $summary = @"
 # Agentic project bootstrap complete
 
@@ -288,6 +485,7 @@ $summary = @"
 - Target repository: `$TargetRepository`
 - Project owner: `$ProjectOwner`
 - Template mode: `$(if ($SourceProjectId) { "copy" } else { "new" })`
+- Demo draft issues seeded: `$(if ($SeedDemoData) { "yes" } else { "no" })`
 
 ## Notes
 
@@ -299,3 +497,4 @@ Write-Host "Created project: $($project.url)"
 if ($env:GITHUB_STEP_SUMMARY) {
     Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary -Encoding utf8
 }
+
